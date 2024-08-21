@@ -18,6 +18,8 @@ import (
 	"github.com/mholt/archiver/v3"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gbytes"
+	. "github.com/onsi/gomega/gexec"
 )
 
 var (
@@ -191,6 +193,191 @@ var _ = V3Describe("deployment", func() {
 			}).Should(Equal(10))
 		})
 	})
+
+	FDescribe("Canary deployments", func() {
+		It("deploys an app, transitions to pause, is continued and then deploys successfully", func() {
+			By("Pushing a canary deployment")
+
+			// Verify first pushed app is running
+			Eventually(func() string {
+				return helpers.CurlAppRoot(Config, appName)
+			}).Should(ContainSubstring("Hi, I'm Dora"))
+
+			// Push onto it a static app with canary (and max-in-flight=2 ?)
+			Expect(cf.Cf("push", appName, "--strategy", "canary", "-b", Config.GetStaticFileBuildpackName(), "-p", staticFileZip).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+
+			// Wait for it to be paused
+			Eventually(func(g Gomega) {
+				session := cf.Cf("app", appName).Wait()
+				g.Expect(session).Should(Say("Active deployment with status PAUSED"))
+				g.Expect(session).Should(Say("strategy:        canary"))
+				g.Expect(session).Should(Exit(0))
+			  }).Should(Succeed())
+
+			// Verify staticfile canary responds
+			// Verify original app still responds
+			By("Checking that both the canary and original apps exist simultaneously")
+			Eventually(func() string {
+				return helpers.CurlAppRoot(Config, appName)
+			}).Should(ContainSubstring("Hello from a staticfile"))
+
+			Eventually(func() string {
+				return helpers.CurlAppRoot(Config, appName)
+			}).Should(ContainSubstring("Hi, I'm Dora"))
+
+			// Continue the deployment
+			Expect(cf.Cf("continue-deployment", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
+
+			// Verfiying the canary process is rolled out successfully
+			// Verify staticfile app responds and original app does not
+			counter := 0
+			Eventually(func() int {
+				if strings.Contains(helpers.CurlAppRoot(Config, appName), "Hello from a staticfile") {
+					counter++
+				} else {
+					counter = 0
+				}
+				return counter
+			}).Should(Equal(10))
+
+			// cf app doesn't mention Active deployment
+			session := cf.Cf("app", appName).Wait()
+			Expect(session).ShouldNot(Say("Active deployment"))
+		})
+
+		// It("deploys an app, transitions to pause and can be cancelled", func() {
+		// 	By("Pushing a canary deployment")
+
+		// 	// Verify first pushed app is running
+
+		// 	// Push onto it a static app with canary and max-in-flight=2
+
+		// 	// Wait for it to be paused
+
+		// 	// Verify staticfile canary responds
+
+		// 	// Verify original app still responds
+
+		// 	// Cancel the deployment
+
+		// 	// Verify original app responds and staticfile app does not
+
+		// 	Eventually(func() string {
+		// 		return helpers.CurlAppRoot(Config, appName)
+		// 	}).Should(ContainSubstring("Hi, I'm Dora"))
+
+		// 	deploymentGuid := CreateDeploymentForDroplet(appGuid, secondDropletGuid, "canary")
+		// 	Expect(deploymentGuid).ToNot(BeEmpty())
+
+		// 	Eventually(func() int { return len(GetProcessGuidsForType(appGuid, "web")) }, Config.CfPushTimeoutDuration()).
+		// 		Should(BeNumerically(">", 1))
+
+		// 	By("Waiting for the a canary deployment to be paused")
+		// 	WaitUntilDeploymentReachesStatus(deploymentGuid, "ACTIVE", "PAUSED")
+
+		// 	By("Checking that both the canary and original apps exist simultaneously")
+		// 	Eventually(func() string {
+		// 		return helpers.CurlAppRoot(Config, appName)
+		// 	}).Should(ContainSubstring("Hello from a staticfile"))
+
+		// 	Eventually(func() string {
+		// 		return helpers.CurlAppRoot(Config, appName)
+		// 	}).Should(ContainSubstring("Hi, I'm Dora"))
+
+		// 	processGuids := GetProcessGuidsForType(appGuid, "web")
+		// 	originalProcessGuid := processGuids[len(processGuids)-2]
+		// 	canaryProcessGuid := processGuids[len(processGuids)-1]
+
+		// 	Eventually(func() int {
+		// 		return GetRunningInstancesStats(canaryProcessGuid)
+		// 	}).Should(Equal(1))
+
+		// 	By("Cancelling the deployment")
+		// 	CancelDeployment(deploymentGuid)
+
+		// 	By("Verifying the cancel succeeded and we rolled back to old process")
+		// 	WaitUntilDeploymentReachesStatus(deploymentGuid, "FINALIZED", "CANCELED")
+
+		// 	Eventually(func() int {
+		// 		return GetRunningInstancesStats(originalProcessGuid)
+		// 	}).Should(Equal(instances))
+
+		// 	Consistently(func() string {
+		// 		return helpers.CurlAppRoot(Config, appName)
+		// 	}, Config.CcClockCycleDuration(), "2s").ShouldNot(ContainSubstring("Hello from a staticfile"))
+
+		// 	counter := 0
+		// 	Eventually(func() int {
+		// 		if strings.Contains(helpers.CurlAppRoot(Config, appName), "Hi, I'm Dora") {
+		// 			counter++
+		// 		} else {
+		// 			counter = 0
+		// 		}
+		// 		return counter
+		// 	}).Should(Equal(10))
+		// })
+	})
+
+	// Describe("max-in-flight deployments", func() {
+	// 	It("deploys an app with max_in_flight with a rolling deployment", func() {
+	// 		By("Pushing a new rolling deployment with max in flight of 4")
+	// 		Eventually(func() string {
+	// 			return helpers.CurlAppRoot(Config, appName)
+	// 		}).Should(ContainSubstring("Hi, I'm Dora"))
+
+	// 		deploymentGuid := CreateDeployment(appGuid, "rolling", 4)
+	// 		Expect(deploymentGuid).ToNot(BeEmpty())
+
+	// 		Eventually(func() int { return len(GetProcessGuidsForType(appGuid, "web")) }, Config.CfPushTimeoutDuration()).
+	// 			Should(BeNumerically(">", 1))
+
+	// 		processGuids := GetProcessGuidsForType(appGuid, "web")
+	// 		newDeploymentGuid := processGuids[len(processGuids)-1]
+
+	// 		By("Ensuring that the new process starts at 4")
+	// 		Consistently(func() int {
+	// 			return GetProcessByGuid(newDeploymentGuid).Instances
+	// 		}).Should(Equal(4))
+
+	// 		Eventually(func() int {
+	// 			return GetRunningInstancesStats(newDeploymentGuid)
+	// 		}).Should(Equal(instances))
+	// 	})
+
+	// 	It("deploys an app with max_in_flight after a canary deployment has been continued", func() {
+	// 		By("Pushing a canary deployment")
+	// 		Eventually(func() string {
+	// 			return helpers.CurlAppRoot(Config, appName)
+	// 		}).Should(ContainSubstring("Hi, I'm Dora"))
+
+	// 		deploymentGuid := CreateDeployment(appGuid, "canary", 4)
+	// 		Expect(deploymentGuid).ToNot(BeEmpty())
+
+	// 		Eventually(func() int { return len(GetProcessGuidsForType(appGuid, "web")) }, Config.CfPushTimeoutDuration()).
+	// 			Should(BeNumerically(">", 1))
+
+	// 		By("Waiting for the a canary deployment to be paused")
+	// 		WaitUntilDeploymentReachesStatus(deploymentGuid, "ACTIVE", "PAUSED")
+
+	// 		processGuids := GetProcessGuidsForType(appGuid, "web")
+	// 		newDeploymentGuid := processGuids[len(processGuids)-1]
+
+	// 		By("Continuing the deployment")
+	// 		ContinueDeployment(deploymentGuid)
+	// 		Eventually(func() int {
+	// 			return GetProcessByGuid(newDeploymentGuid).Instances
+	// 		}).ShouldNot(Equal(1))
+
+	// 		By("Ensuring that the new process continues at max-in-flight 4")
+	// 		Consistently(func() int {
+	// 			return GetProcessByGuid(newDeploymentGuid).Instances
+	// 		}).Should(Equal(4))
+
+	// 		Eventually(func() int {
+	// 			return GetRunningInstancesStats(newDeploymentGuid)
+	// 		}).Should(Equal(instances))
+	// 	})
+	// })
 })
 
 func checkAppRemainsAlive(appName string) (chan<- bool, <-chan bool) {
