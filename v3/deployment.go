@@ -194,19 +194,16 @@ var _ = V3Describe("deployment", func() {
 		})
 	})
 
-	FDescribe("Canary deployments", func() {
+	Describe("Canary deployments", func() {
 		It("deploys an app, transitions to pause, is continued and then deploys successfully", func() {
 			By("Pushing a canary deployment")
 
-			// Verify first pushed app is running
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, appName)
 			}).Should(ContainSubstring("Hi, I'm Dora"))
 
-			// Push onto it a static app with canary (and max-in-flight=2 ?)
 			Expect(cf.Cf("push", appName, "--strategy", "canary", "-b", Config.GetStaticFileBuildpackName(), "-p", staticFileZip).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-			// Wait for it to be paused
 			Eventually(func(g Gomega) {
 				session := cf.Cf("app", appName).Wait()
 				g.Expect(session).Should(Say("Active deployment with status PAUSED"))
@@ -214,8 +211,6 @@ var _ = V3Describe("deployment", func() {
 				g.Expect(session).Should(Exit(0))
 			  }).Should(Succeed())
 
-			// Verify staticfile canary responds
-			// Verify original app still responds
 			By("Checking that both the canary and original apps exist simultaneously")
 			Eventually(func() string {
 				return helpers.CurlAppRoot(Config, appName)
@@ -225,11 +220,10 @@ var _ = V3Describe("deployment", func() {
 				return helpers.CurlAppRoot(Config, appName)
 			}).Should(ContainSubstring("Hi, I'm Dora"))
 
-			// Continue the deployment
+			By("Continuing the deployment")
 			Expect(cf.Cf("continue-deployment", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-			// Verfiying the canary process is rolled out successfully
-			// Verify staticfile app responds and original app does not
+			By("Verifying the continue succeeded and we rolled out the new process")
 			counter := 0
 			Eventually(func() int {
 				if strings.Contains(helpers.CurlAppRoot(Config, appName), "Hello from a staticfile") {
@@ -240,82 +234,52 @@ var _ = V3Describe("deployment", func() {
 				return counter
 			}).Should(Equal(10))
 
-			// cf app doesn't mention Active deployment
 			session := cf.Cf("app", appName).Wait()
 			Expect(session).ShouldNot(Say("Active deployment"))
 		})
 
-		// It("deploys an app, transitions to pause and can be cancelled", func() {
-		// 	By("Pushing a canary deployment")
+		It("deploys an app, transitions to pause and can be cancelled", func() {
+			By("Pushing a canary deployment")
 
-		// 	// Verify first pushed app is running
+			Eventually(func() string {
+				return helpers.CurlAppRoot(Config, appName)
+			}).Should(ContainSubstring("Hi, I'm Dora"))
 
-		// 	// Push onto it a static app with canary and max-in-flight=2
+			Expect(cf.Cf("push", appName, "--strategy", "canary", "-b", Config.GetStaticFileBuildpackName(), "-p", staticFileZip).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-		// 	// Wait for it to be paused
+			Eventually(func(g Gomega) {
+				session := cf.Cf("app", appName).Wait()
+				g.Expect(session).Should(Say("Active deployment with status PAUSED"))
+				g.Expect(session).Should(Say("strategy:        canary"))
+				g.Expect(session).Should(Exit(0))
+			  }).Should(Succeed())
 
-		// 	// Verify staticfile canary responds
+			By("Checking that both the canary and original apps exist simultaneously")
+			Eventually(func() string {
+				return helpers.CurlAppRoot(Config, appName)
+			}).Should(ContainSubstring("Hello from a staticfile"))
 
-		// 	// Verify original app still responds
+			Eventually(func() string {
+				return helpers.CurlAppRoot(Config, appName)
+			}).Should(ContainSubstring("Hi, I'm Dora"))
 
-		// 	// Cancel the deployment
+			By("Cancelling the deployment")
+			Expect(cf.Cf("cancel-deployment", appName).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-		// 	// Verify original app responds and staticfile app does not
+			By("Verifying the cancel succeeded and we rolled back to old process")
+			counter := 0
+			Eventually(func() int {
+				if strings.Contains(helpers.CurlAppRoot(Config, appName), "Hi, I'm Dora") {
+					counter++
+				} else {
+					counter = 0
+				}
+				return counter
+			}).Should(Equal(10))
 
-		// 	Eventually(func() string {
-		// 		return helpers.CurlAppRoot(Config, appName)
-		// 	}).Should(ContainSubstring("Hi, I'm Dora"))
-
-		// 	deploymentGuid := CreateDeploymentForDroplet(appGuid, secondDropletGuid, "canary")
-		// 	Expect(deploymentGuid).ToNot(BeEmpty())
-
-		// 	Eventually(func() int { return len(GetProcessGuidsForType(appGuid, "web")) }, Config.CfPushTimeoutDuration()).
-		// 		Should(BeNumerically(">", 1))
-
-		// 	By("Waiting for the a canary deployment to be paused")
-		// 	WaitUntilDeploymentReachesStatus(deploymentGuid, "ACTIVE", "PAUSED")
-
-		// 	By("Checking that both the canary and original apps exist simultaneously")
-		// 	Eventually(func() string {
-		// 		return helpers.CurlAppRoot(Config, appName)
-		// 	}).Should(ContainSubstring("Hello from a staticfile"))
-
-		// 	Eventually(func() string {
-		// 		return helpers.CurlAppRoot(Config, appName)
-		// 	}).Should(ContainSubstring("Hi, I'm Dora"))
-
-		// 	processGuids := GetProcessGuidsForType(appGuid, "web")
-		// 	originalProcessGuid := processGuids[len(processGuids)-2]
-		// 	canaryProcessGuid := processGuids[len(processGuids)-1]
-
-		// 	Eventually(func() int {
-		// 		return GetRunningInstancesStats(canaryProcessGuid)
-		// 	}).Should(Equal(1))
-
-		// 	By("Cancelling the deployment")
-		// 	CancelDeployment(deploymentGuid)
-
-		// 	By("Verifying the cancel succeeded and we rolled back to old process")
-		// 	WaitUntilDeploymentReachesStatus(deploymentGuid, "FINALIZED", "CANCELED")
-
-		// 	Eventually(func() int {
-		// 		return GetRunningInstancesStats(originalProcessGuid)
-		// 	}).Should(Equal(instances))
-
-		// 	Consistently(func() string {
-		// 		return helpers.CurlAppRoot(Config, appName)
-		// 	}, Config.CcClockCycleDuration(), "2s").ShouldNot(ContainSubstring("Hello from a staticfile"))
-
-		// 	counter := 0
-		// 	Eventually(func() int {
-		// 		if strings.Contains(helpers.CurlAppRoot(Config, appName), "Hi, I'm Dora") {
-		// 			counter++
-		// 		} else {
-		// 			counter = 0
-		// 		}
-		// 		return counter
-		// 	}).Should(Equal(10))
-		// })
+			session := cf.Cf("app", appName).Wait()
+			Expect(session).ShouldNot(Say("Active deployment"))
+		})
 	})
 
 	// Describe("max-in-flight deployments", func() {
