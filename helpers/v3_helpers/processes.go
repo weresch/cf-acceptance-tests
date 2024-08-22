@@ -13,6 +13,7 @@ type ProcessList struct {
 
 type Process struct {
 	Guid    string `json:"guid"`
+	Instances     int    `json:"instances"`
 	Type    string `json:"type"`
 	Command string `json:"command"`
 	Name    string `json:"-"`

@@ -282,66 +282,64 @@ var _ = V3Describe("deployment", func() {
 		})
 	})
 
-	// Describe("max-in-flight deployments", func() {
-	// 	It("deploys an app with max_in_flight with a rolling deployment", func() {
-	// 		By("Pushing a new rolling deployment with max in flight of 4")
-	// 		Eventually(func() string {
-	// 			return helpers.CurlAppRoot(Config, appName)
-	// 		}).Should(ContainSubstring("Hi, I'm Dora"))
+	FDescribe("max-in-flight deployments", func() {
+		It("deploys an app with max_in_flight with a rolling deployment", func() {
+			By("Pushing a new rolling deployment with max in flight of 4")
+			Eventually(func() string {
+				return helpers.CurlAppRoot(Config, appName)
+			}).Should(ContainSubstring("Hi, I'm Dora"))
 
-	// 		deploymentGuid := CreateDeployment(appGuid, "rolling", 4)
-	// 		Expect(deploymentGuid).ToNot(BeEmpty())
+			Expect(cf.Cf("push", appName, "--strategy", "rolling", "--max-in-flight", "4", "-b", Config.GetStaticFileBuildpackName(), "-p", staticFileZip).Wait(Config.CfPushTimeoutDuration())).To(Exit(0))
 
-	// 		Eventually(func() int { return len(GetProcessGuidsForType(appGuid, "web")) }, Config.CfPushTimeoutDuration()).
-	// 			Should(BeNumerically(">", 1))
+			Eventually(func() int { return len(GetProcessGuidsForType(appGuid, "web")) }, Config.CfPushTimeoutDuration()).Should(BeNumerically(">", 1))
 
-	// 		processGuids := GetProcessGuidsForType(appGuid, "web")
-	// 		newDeploymentGuid := processGuids[len(processGuids)-1]
+			processGuids := GetProcessGuidsForType(appGuid, "web")
+			newDeploymentGuid := processGuids[len(processGuids)-1]
 
-	// 		By("Ensuring that the new process starts at 4")
-	// 		Consistently(func() int {
-	// 			return GetProcessByGuid(newDeploymentGuid).Instances
-	// 		}).Should(Equal(4))
+			By("Ensuring that the new process starts at 4")
+			Consistently(func() int {
+				return GetProcessByGuid(newDeploymentGuid).Instances
+			}).Should(Equal(4))
 
-	// 		Eventually(func() int {
-	// 			return GetRunningInstancesStats(newDeploymentGuid)
-	// 		}).Should(Equal(instances))
-	// 	})
+			Eventually(func() int {
+				return GetRunningInstancesStats(newDeploymentGuid)
+			}).Should(Equal(instances))
+		})
 
-	// 	It("deploys an app with max_in_flight after a canary deployment has been continued", func() {
-	// 		By("Pushing a canary deployment")
-	// 		Eventually(func() string {
-	// 			return helpers.CurlAppRoot(Config, appName)
-	// 		}).Should(ContainSubstring("Hi, I'm Dora"))
+		// It("deploys an app with max_in_flight after a canary deployment has been continued", func() {
+		// 	By("Pushing a canary deployment")
+		// 	Eventually(func() string {
+		// 		return helpers.CurlAppRoot(Config, appName)
+		// 	}).Should(ContainSubstring("Hi, I'm Dora"))
 
-	// 		deploymentGuid := CreateDeployment(appGuid, "canary", 4)
-	// 		Expect(deploymentGuid).ToNot(BeEmpty())
+		// 	deploymentGuid := CreateDeployment(appGuid, "canary", 4)
+		// 	Expect(deploymentGuid).ToNot(BeEmpty())
 
-	// 		Eventually(func() int { return len(GetProcessGuidsForType(appGuid, "web")) }, Config.CfPushTimeoutDuration()).
-	// 			Should(BeNumerically(">", 1))
+		// 	Eventually(func() int { return len(GetProcessGuidsForType(appGuid, "web")) }, Config.CfPushTimeoutDuration()).
+		// 		Should(BeNumerically(">", 1))
 
-	// 		By("Waiting for the a canary deployment to be paused")
-	// 		WaitUntilDeploymentReachesStatus(deploymentGuid, "ACTIVE", "PAUSED")
+		// 	By("Waiting for the a canary deployment to be paused")
+		// 	WaitUntilDeploymentReachesStatus(deploymentGuid, "ACTIVE", "PAUSED")
 
-	// 		processGuids := GetProcessGuidsForType(appGuid, "web")
-	// 		newDeploymentGuid := processGuids[len(processGuids)-1]
+		// 	processGuids := GetProcessGuidsForType(appGuid, "web")
+		// 	newDeploymentGuid := processGuids[len(processGuids)-1]
 
-	// 		By("Continuing the deployment")
-	// 		ContinueDeployment(deploymentGuid)
-	// 		Eventually(func() int {
-	// 			return GetProcessByGuid(newDeploymentGuid).Instances
-	// 		}).ShouldNot(Equal(1))
+		// 	By("Continuing the deployment")
+		// 	ContinueDeployment(deploymentGuid)
+		// 	Eventually(func() int {
+		// 		return GetProcessByGuid(newDeploymentGuid).Instances
+		// 	}).ShouldNot(Equal(1))
 
-	// 		By("Ensuring that the new process continues at max-in-flight 4")
-	// 		Consistently(func() int {
-	// 			return GetProcessByGuid(newDeploymentGuid).Instances
-	// 		}).Should(Equal(4))
+		// 	By("Ensuring that the new process continues at max-in-flight 4")
+		// 	Consistently(func() int {
+		// 		return GetProcessByGuid(newDeploymentGuid).Instances
+		// 	}).Should(Equal(4))
 
-	// 		Eventually(func() int {
-	// 			return GetRunningInstancesStats(newDeploymentGuid)
-	// 		}).Should(Equal(instances))
-	// 	})
-	// })
+		// 	Eventually(func() int {
+		// 		return GetRunningInstancesStats(newDeploymentGuid)
+		// 	}).Should(Equal(instances))
+		// })
+	})
 })
 
 func checkAppRemainsAlive(appName string) (chan<- bool, <-chan bool) {
